@@ -11,14 +11,13 @@ public class TitleScreen : MonoBehaviour
     [Header("Scene Settings")]
     [SerializeField] private string sceneToLoad;
 
-    [Header("VR Settings")]
+    [Header("VR Canvas Settings")]
     [SerializeField] private float distanceFromCamera = 2f;
-    [SerializeField] private float canvasScale = 0.003f;
-    [Tooltip("Reconfigure VR settings when this is toggled")]
-    [SerializeField] private bool reconfigureVR = false;
+    [SerializeField] private float followSpeed = 5f;
 
     private Canvas canvas;
-    private bool lastReconfigureState = false;
+    private RectTransform canvasRect;
+    private Camera vrCamera;
 
     // Called when Start button is pressed
     public void StartGame()
@@ -67,19 +66,6 @@ public class TitleScreen : MonoBehaviour
 #endif
     }
 
-    void Update()
-    {
-        // Allow reconfiguring VR at runtime when toggle is changed
-        if (reconfigureVR != lastReconfigureState)
-        {
-            lastReconfigureState = reconfigureVR;
-            if (reconfigureVR)
-            {
-                ConfigureCanvasForVR();
-            }
-        }
-    }
-
     private void ConfigureCanvasForVR()
     {
         // Get the Canvas component
@@ -95,37 +81,44 @@ public class TitleScreen : MonoBehaviour
         canvas.renderMode = RenderMode.WorldSpace;
 
         // Find the main camera (VR camera)
-        Camera mainCamera = Camera.main;
-        if (mainCamera == null)
+        vrCamera = Camera.main;
+        if (vrCamera == null)
         {
             Debug.LogWarning("No main camera found!");
             return;
         }
 
-        // Get the RectTransform of the canvas
-        RectTransform canvasRect = canvas.GetComponent<RectTransform>();
-
-        // Center the pivot point
-        canvasRect.pivot = new Vector2(0.5f, 0.5f);
-        canvasRect.anchorMin = new Vector2(0.5f, 0.5f);
-        canvasRect.anchorMax = new Vector2(0.5f, 0.5f);
-
-        // Apply scale directly (much simpler approach)
-        canvasRect.localScale = new Vector3(canvasScale, canvasScale, canvasScale);
-
-        // Position the canvas in front of the camera (centered)
-        canvasRect.position = mainCamera.transform.position + mainCamera.transform.forward * distanceFromCamera;
-
-        // Make it face the camera properly (opposite direction)
-        canvasRect.rotation = Quaternion.LookRotation(mainCamera.transform.forward);
+        // Cache the RectTransform
+        canvasRect = canvas.GetComponent<RectTransform>();
 
         // Ensure canvas has world camera set for proper raycasting
-        canvas.worldCamera = mainCamera;
+        canvas.worldCamera = vrCamera;
 
         // Configure VR UI interaction
         ConfigureVRUIInteraction();
+    }
 
-        Debug.Log($"Canvas configured for VR - Scale: {canvasRect.localScale}, Distance: {distanceFromCamera}m, Position: {canvasRect.position}");
+    void Update()
+    {
+        FollowCamera();
+    }
+
+    private void FollowCamera()
+    {
+        if (vrCamera == null || canvasRect == null)
+        {
+            return;
+        }
+
+        // Calculate target position in front of the camera
+        Vector3 targetPosition = vrCamera.transform.position + vrCamera.transform.forward * distanceFromCamera;
+
+        // Smoothly move canvas to target position
+        canvasRect.position = Vector3.Lerp(canvasRect.position, targetPosition, followSpeed * Time.deltaTime);
+
+        // Make canvas face the camera
+        Quaternion targetRotation = Quaternion.LookRotation(vrCamera.transform.forward);
+        canvasRect.rotation = Quaternion.Slerp(canvasRect.rotation, targetRotation, followSpeed * Time.deltaTime);
     }
 
     private void ConfigureVRUIInteraction()
