@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 using UnityEngine.XR.Interaction.Toolkit.UI;
@@ -14,6 +15,7 @@ public class TitleScreen : MonoBehaviour
     [Header("VR Canvas Settings")]
     [SerializeField] private float distanceFromCamera = 2f;
     [SerializeField] private float followSpeed = 5f;
+    [SerializeField] private float canvasScale = 0.0006f;
 
     private Canvas canvas;
     private RectTransform canvasRect;
@@ -91,6 +93,9 @@ public class TitleScreen : MonoBehaviour
         // Cache the RectTransform
         canvasRect = canvas.GetComponent<RectTransform>();
 
+        // Set canvas scale
+        canvasRect.localScale = new Vector3(canvasScale, canvasScale, canvasScale);
+
         // Ensure canvas has world camera set for proper raycasting
         canvas.worldCamera = vrCamera;
 
@@ -137,7 +142,37 @@ public class TitleScreen : MonoBehaviour
             vrRaycaster = canvas.gameObject.AddComponent<TrackedDeviceGraphicRaycaster>();
         }
 
+        // Configure EventSystem for VR input
+        ConfigureEventSystem();
+
         Debug.Log("VR UI Raycaster configured");
+    }
+
+    private void ConfigureEventSystem()
+    {
+        // Find or create EventSystem
+        EventSystem eventSystem = FindFirstObjectByType<EventSystem>();
+        if (eventSystem == null)
+        {
+            GameObject eventSystemObj = new GameObject("EventSystem");
+            eventSystem = eventSystemObj.AddComponent<EventSystem>();
+        }
+
+        // Remove StandaloneInputModule if present (doesn't work with VR)
+        StandaloneInputModule standaloneInput = eventSystem.GetComponent<StandaloneInputModule>();
+        if (standaloneInput != null)
+        {
+            Destroy(standaloneInput);
+        }
+
+        // Add XRUIInputModule for VR controller input
+        XRUIInputModule xrInputModule = eventSystem.GetComponent<XRUIInputModule>();
+        if (xrInputModule == null)
+        {
+            xrInputModule = eventSystem.gameObject.AddComponent<XRUIInputModule>();
+        }
+
+        Debug.Log("EventSystem configured for VR input");
     }
 
     private void OnEnable()
