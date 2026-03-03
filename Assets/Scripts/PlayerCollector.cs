@@ -2,7 +2,7 @@ using UnityEngine;
 
 public class PlayerCollector : MonoBehaviour
 {
-    private SnowboardController snowboardController;
+    private SnowboardControlV2 snowboardController;
     void OnCollisionEnter(Collision collision)
     {
         if (collision.gameObject.CompareTag("Collectible"))
