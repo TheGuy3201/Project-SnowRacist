@@ -7,7 +7,10 @@ public class SnowboardControlV2 : MonoBehaviour
     [Header("Steering")]
     [SerializeField] private float fixedMaxAngle = 45f;
     [SerializeField] private float rotationSpeedDegPerSec = 120f;
-
+    [SerializeField] private float baseDrag = 0f;      // drag when straight
+    [SerializeField] private float maxDragWhenAngled = 3f; // drag at fixedMaxAngle (tweak)
+    [SerializeField] private float returnToCenterDegPerSec = 40f;
+    
     [Header("Side Movement")]
     [SerializeField] private float sideMovementSpeed = 2f; // <-- requested (private serialized)
 
@@ -47,7 +50,7 @@ public class SnowboardControlV2 : MonoBehaviour
 
         originalCenterOfMass = rb.centerOfMass;
     }
-
+    
     private void FixedUpdate()
     {
         float steer = steerAction.ReadValue<float>(); // -1..+1
@@ -60,8 +63,16 @@ public class SnowboardControlV2 : MonoBehaviour
             else rb.centerOfMass = originalCenterOfMass;
         }
 
-        // Yaw control (relative to start, clamped)
-        yawOffsetDeg += steer * rotationSpeedDegPerSec * Time.fixedDeltaTime;
+        // Yaw control (relative to start, clamped) + RETURN TO CENTER when no input
+        if (Mathf.Abs(steer) > 0.01f)
+        {
+            yawOffsetDeg += steer * rotationSpeedDegPerSec * Time.fixedDeltaTime;
+        }
+        else
+        {
+            yawOffsetDeg = Mathf.MoveTowards(yawOffsetDeg, 0f, returnToCenterDegPerSec * Time.fixedDeltaTime);
+        }
+
         yawOffsetDeg = Mathf.Clamp(yawOffsetDeg, -fixedMaxAngle, fixedMaxAngle);
 
         // Preserve current physics tilt (X/Z), only override yaw (Y)
@@ -69,32 +80,23 @@ public class SnowboardControlV2 : MonoBehaviour
         float targetYaw = startYawDeg + yawOffsetDeg;
         rb.MoveRotation(Quaternion.Euler(currentEuler.x, targetYaw, currentEuler.z));
 
-        // NEW: add sideways motion on WORLD Z using yaw angle
         ApplySideMovementFromYaw();
     }
-
-    /// <summary>
-    /// Uses current yaw (relative to start) to push the board sideways on WORLD Z.
-    /// 0° => multiplier 0 (no side movement)
-    /// ±fixedMaxAngle => multiplier 1 (full side movement)
-    /// Left moves -Z, Right moves +Z.
-    /// </summary>
+    
     private void ApplySideMovementFromYaw()
     {
-        // Signed yaw difference from start (in degrees)
         float currentYaw = rb.rotation.eulerAngles.y;
-        float yawDelta = Mathf.DeltaAngle(startYawDeg, currentYaw); // [-180, 180], left negative, right positive
+        float yawDelta = Mathf.DeltaAngle(startYawDeg, currentYaw);
 
-        // Convert angle magnitude to 0..1 multiplier
         float multiplier = Mathf.InverseLerp(0f, fixedMaxAngle, Mathf.Abs(yawDelta));
 
-        // Direction: left = -1, right = +1
         float dir = -Mathf.Sign(yawDelta);
-
-        // Target sideways velocity on world Z
         float targetZVelocity = dir * sideMovementSpeed * multiplier;
 
-        // Apply ONLY the Z component; keep X/Y from physics (gravity/slope)
+        // 1) Drag increases with angle (slows overall motion, including downhill)
+        rb.linearDamping = Mathf.Lerp(baseDrag, maxDragWhenAngled, multiplier)/2;
+
+        // 2) But we force Z back to the desired side speed so drag won’t kill it
         Vector3 v = rb.linearVelocity;
         v.z = targetZVelocity;
         rb.linearVelocity = v;
